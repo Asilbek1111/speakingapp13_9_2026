@@ -29,28 +29,33 @@ export default function DashboardPage() {
         (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
       if (SpeechRecognition) {
         const recognition = new SpeechRecognition()
+        
+        // Setting interimResults to false prevents mobile WebKit engines from looping duplicate words
         recognition.continuous = true
-        recognition.interimResults = true
+        recognition.interimResults = false
         recognition.lang = 'en-US'
 
         recognition.onresult = (event: any) => {
-          let finalTranscript = ''
-          let interimTranscript = ''
+          let accumulatedText = ''
 
           for (let i = 0; i < event.results.length; i++) {
-            const result = event.results[i]
-            if (result.isFinal) {
-              finalTranscript += result[0].transcript + ' '
-            } else {
-              interimTranscript += result[0].transcript
+            const transcriptChunk = event.results[i][0].transcript.trim()
+            if (transcriptChunk) {
+              accumulatedText += transcriptChunk + ' '
             }
           }
 
-          const fullTranscript = (finalTranscript + interimTranscript)
-            .replace(/\s+/g, ' ')
-            .trim()
+          // Deduplication pass: remove back-to-back duplicate words caused by mobile WebKit buffers
+          const words = accumulatedText.trim().split(/\s+/)
+          const cleanWords: string[] = []
 
-          setTranscript(fullTranscript)
+          for (let i = 0; i < words.length; i++) {
+            if (i === 0 || words[i].toLowerCase() !== words[i - 1].toLowerCase()) {
+              cleanWords.push(words[i])
+            }
+          }
+
+          setTranscript(cleanWords.join(' '))
         }
 
         recognition.onerror = (event: any) => {
@@ -84,7 +89,7 @@ export default function DashboardPage() {
 
   const toggleListening = () => {
     if (!recognitionRef.current) {
-      alert('Speech Recognition is not supported in this browser. Please use Google Chrome or Microsoft Edge.')
+      alert('Speech Recognition is not supported in this browser. Please use Google Chrome or Safari.')
       return
     }
 
@@ -206,7 +211,7 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* Controls Box */}
+            {/* Recording Controls */}
             <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 flex flex-col items-center gap-4 text-center">
               <button
                 onClick={toggleListening}
