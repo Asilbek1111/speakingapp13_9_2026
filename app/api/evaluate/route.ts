@@ -17,24 +17,35 @@ export async function POST(req: Request) {
     }
 
     const prompt = `
-You are an expert English speaking examiner for Multi-Level national examinations.
-Evaluate the candidate's spoken response out of a MAXIMUM TOTAL MARK OF 75.
+You are an expert English speaking examiner for national Multi-Level (CEFR B1-C1) examinations.
+Evaluate the candidate's spoken response thoroughly out of a MAXIMUM TOTAL MARK OF 75.
 
-Question/Prompt: "${context || 'Do you work or are you a student?'}"
-Candidate's Spoken Answer: "${userText}"
+Question/Prompt: "${context || 'Tell me about yourself and your daily routine.'}"
+Candidate's Spoken Response: "${userText}"
 
-Marking Criteria (Total 75 points):
-- Fluency & Coherence (Max 20 marks)
-- Grammatical Range & Accuracy (Max 20 marks)
-- Lexical Resource / Vocabulary (Max 20 marks)
-- Pronunciation & Intonation (Max 15 marks)
+Evaluate strictly based on these four criteria:
+1. Fluency & Coherence (Max 20 marks)
+2. Grammatical Range & Accuracy (Max 20 marks)
+3. Lexical Resource / Vocabulary (Max 20 marks)
+4. Pronunciation & Articulation (Max 15 marks)
 
-Provide a JSON output with the following exact keys (no markdown backticks):
+Provide a JSON response matching this EXACT structure (NO markdown backticks, raw JSON only):
 {
-  "bandScore": "Total Score / 75 (e.g. '58 / 75')",
-  "feedback": "Detailed 2-3 sentence breakdown explaining the marks awarded, key strengths, and specific grammatical or vocabulary corrections.",
-  "nextQuestion": "The next logical question to ask the candidate.",
-  "spokenText": "Encouraging verbal response (1-2 sentences) announcing their score out of 75 and asking the next question."
+  "totalScore": 58,
+  "cefrLevel": "B2",
+  "scores": {
+    "coherence": "15/20",
+    "grammar": "14/20",
+    "vocabulary": "16/20",
+    "pronunciation": "13/15"
+  },
+  "mistakes": [
+    { "original": "I am go to study", "correction": "I go to study / I am going to study", "explanation": "Avoid combining 'am' with a base verb in simple present tense." }
+  ],
+  "polishedAnswer": "A highly polished, natural C1-level version of what the candidate attempted to say, using sophisticated vocabulary and varied sentence structures.",
+  "advice": "2-3 actionable, high-impact tips on how to improve their score for the next attempt.",
+  "nextQuestion": "The next logical question for the speaking exam.",
+  "spokenText": "A warm 1-sentence examiner summary of their performance followed by the next question."
 }
 `
 
