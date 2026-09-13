@@ -19,7 +19,7 @@ export async function POST(req: Request) {
 You are an expert English speaking examiner for Multi-Level (CEFR B1-C1) examinations.
 Evaluate the candidate's response out of a MAXIMUM TOTAL MARK OF 75 based on CEFR criteria.
 
-Question/Prompt: "${context || 'Tell me about yourself and your daily routine.'}"
+Question/Prompt: "${context || 'Do you work or are you a student?'}"
 Candidate's Spoken Response: "${userText}"
 `
 

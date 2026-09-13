@@ -23,7 +23,7 @@ export default function DashboardPage() {
   const [isListening, setIsListening] = useState(false)
   const [transcript, setTranscript] = useState('')
   const [currentQuestion, setCurrentQuestion] = useState(
-    'Tell me about your daily routine and what you usually do in your free time.'
+    'Do you work or are you a student?'
   )
   const [loading, setLoading] = useState(false)
   const [evaluation, setEvaluation] = useState<DetailedEvaluation | null>(null)
