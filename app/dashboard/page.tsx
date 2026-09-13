@@ -137,7 +137,7 @@ export default function DashboardPage() {
       if (data.spokenText) speakText(data.spokenText)
     } catch (err) {
       setErrorMessage('Connection error. Please try again.')
-    } fontally {
+    } finally {
       setLoading(false)
     }
   }
