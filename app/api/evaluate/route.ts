@@ -7,7 +7,7 @@ export async function POST(req: Request) {
   try {
     const { userText, context } = await req.json()
 
-    // Server-side validation: ensure speech is at least 3 words
+    // Server-side validation
     const wordCount = userText ? userText.trim().split(/\s+/).length : 0
     if (wordCount < 3) {
       return NextResponse.json(
@@ -17,17 +17,25 @@ export async function POST(req: Request) {
     }
 
     const prompt = `
-You are an expert English speaking evaluator.
-Current evaluation context/question: "${context || 'Tell me about yourself and your routine.'}"
-User's spoken answer: "${userText}"
+You are an expert English speaking examiner for Multi-Level national examinations.
+Evaluate the candidate's spoken response out of a MAXIMUM TOTAL MARK OF 75.
 
-Provide a structured response in JSON format with:
-1. "feedback": Quick constructive feedback on grammar, vocabulary, and clarity (2-3 sentences max).
-2. "bandScore": Estimated band or rating (e.g. "6.5 / 9.0" or "Intermediate").
-3. "nextQuestion": The next engaging speaking question to ask the user.
-4. "spokenText": A concise, friendly response to speak aloud to the user (combining quick encouragement + next question).
+Question/Prompt: "${context || 'Tell me about yourself and your routine.'}"
+Candidate's Spoken Answer: "${userText}"
 
-Return ONLY raw JSON with no markdown backticks.
+Marking Criteria (Total 75 points):
+- Fluency & Coherence (Max 20 marks)
+- Grammatical Range & Accuracy (Max 20 marks)
+- Lexical Resource / Vocabulary (Max 20 marks)
+- Pronunciation & Intonation (Max 15 marks)
+
+Provide a JSON output with the following exact keys (no markdown backticks):
+{
+  "bandScore": "Total Score / 75 (e.g. '58 / 75')",
+  "feedback": "Detailed 2-3 sentence breakdown explaining the marks awarded, key strengths, and specific grammatical or vocabulary corrections.",
+  "nextQuestion": "The next logical question to ask the candidate.",
+  "spokenText": "Encouraging verbal response (1-2 sentences) announcing their score out of 75 and asking the next question."
+}
 `
 
     const response = await ai.models.generateContent({
@@ -42,7 +50,6 @@ Return ONLY raw JSON with no markdown backticks.
   } catch (error: any) {
     console.error('AI Evaluation Error:', error)
 
-    // Handle Rate Limit (429 Too Many Requests)
     if (error?.status === 429 || error?.message?.includes('429')) {
       return NextResponse.json(
         { error: 'System is busy due to high traffic. Please wait 10 seconds and try again.' },
