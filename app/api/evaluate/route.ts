@@ -3,13 +3,13 @@ import { NextResponse } from 'next/server'
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
 
-// Helper helper function to pause execution
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 export async function POST(req: Request) {
   try {
     const { userText, context } = await req.json()
 
+    // Server-side word count validation
     const wordCount = userText ? userText.trim().split(/\s+/).length : 0
     if (wordCount < 3) {
       return NextResponse.json(
@@ -53,18 +53,18 @@ Provide a JSON response matching this EXACT structure (NO markdown backticks, ra
 
     let response
     try {
-      // First attempt
+      // First attempt using stable gemini-2.5-flash
       response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt,
       })
     } catch (firstErr: any) {
-      // If rate limited, wait 2 seconds and retry automatically
+      // Automatic retry logic if rate limit is temporarily hit
       if (firstErr?.status === 429 || firstErr?.message?.includes('429')) {
-        console.warn('Rate limit hit. Retrying in 2 seconds...')
-        await delay(2000)
+        console.warn('Rate limit encountered. Retrying request in 3 seconds...')
+        await delay(3000)
         response = await ai.models.generateContent({
-          model: 'gemini-3.6-flash',
+          model: 'gemini-2.5-flash',
           contents: prompt,
         })
       } else {
@@ -81,7 +81,7 @@ Provide a JSON response matching this EXACT structure (NO markdown backticks, ra
 
     if (error?.status === 429 || error?.message?.includes('429')) {
       return NextResponse.json(
-        { error: 'System is busy due to high traffic. Please wait 5-10 seconds before submitting again.' },
+        { error: 'Google AI Studio rate limit reached. Please wait ~30 seconds before submitting again, or check your API key quota.' },
         { status: 429 }
       )
     }
