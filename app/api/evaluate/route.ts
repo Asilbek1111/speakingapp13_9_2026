@@ -3,11 +3,13 @@ import { NextResponse } from 'next/server'
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
 
+// Helper helper function to pause execution
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
 export async function POST(req: Request) {
   try {
     const { userText, context } = await req.json()
 
-    // Server-side validation
     const wordCount = userText ? userText.trim().split(/\s+/).length : 0
     if (wordCount < 3) {
       return NextResponse.json(
@@ -20,7 +22,7 @@ export async function POST(req: Request) {
 You are an expert English speaking examiner for national Multi-Level (CEFR B1-C1) examinations.
 Evaluate the candidate's spoken response thoroughly out of a MAXIMUM TOTAL MARK OF 75.
 
-Question/Prompt: "${context || 'Do you work or are you a student?'}"
+Question/Prompt: "${context || 'Tell me about yourself and your daily routine.'}"
 Candidate's Spoken Response: "${userText}"
 
 Evaluate strictly based on these four criteria:
@@ -49,10 +51,26 @@ Provide a JSON response matching this EXACT structure (NO markdown backticks, ra
 }
 `
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: prompt,
-    })
+    let response
+    try {
+      // First attempt
+      response = await ai.models.generateContent({
+        model: 'gemini-3.6-flash',
+        contents: prompt,
+      })
+    } catch (firstErr: any) {
+      // If rate limited, wait 2 seconds and retry automatically
+      if (firstErr?.status === 429 || firstErr?.message?.includes('429')) {
+        console.warn('Rate limit hit. Retrying in 2 seconds...')
+        await delay(2000)
+        response = await ai.models.generateContent({
+          model: 'gemini-3.6-flash',
+          contents: prompt,
+        })
+      } else {
+        throw firstErr
+      }
+    }
 
     const rawText = response.text?.replace(/```json|```/g, '').trim() || '{}'
     const parsedData = JSON.parse(rawText)
@@ -63,7 +81,7 @@ Provide a JSON response matching this EXACT structure (NO markdown backticks, ra
 
     if (error?.status === 429 || error?.message?.includes('429')) {
       return NextResponse.json(
-        { error: 'System is busy due to high traffic. Please wait 10 seconds and try again.' },
+        { error: 'System is busy due to high traffic. Please wait 5-10 seconds before submitting again.' },
         { status: 429 }
       )
     }
