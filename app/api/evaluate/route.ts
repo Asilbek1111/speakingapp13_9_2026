@@ -20,7 +20,7 @@ export async function POST(req: Request) {
 You are an expert English speaking examiner for Multi-Level national examinations.
 Evaluate the candidate's spoken response out of a MAXIMUM TOTAL MARK OF 75.
 
-Question/Prompt: "${context || 'Tell me about yourself and your routine.'}"
+Question/Prompt: "${context || 'Do you work or are you a student?'}"
 Candidate's Spoken Answer: "${userText}"
 
 Marking Criteria (Total 75 points):
