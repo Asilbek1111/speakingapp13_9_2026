@@ -34,11 +34,23 @@ export default function DashboardPage() {
         recognition.lang = 'en-US'
 
         recognition.onresult = (event: any) => {
-          let currentTranscript = ''
+          let finalTranscript = ''
+          let interimTranscript = ''
+
           for (let i = 0; i < event.results.length; i++) {
-            currentTranscript += event.results[i][0].transcript
+            const result = event.results[i]
+            if (result.isFinal) {
+              finalTranscript += result[0].transcript + ' '
+            } else {
+              interimTranscript += result[0].transcript
+            }
           }
-          setTranscript(currentTranscript)
+
+          const fullTranscript = (finalTranscript + interimTranscript)
+            .replace(/\s+/g, ' ')
+            .trim()
+
+          setTranscript(fullTranscript)
         }
 
         recognition.onerror = (event: any) => {
@@ -72,7 +84,7 @@ export default function DashboardPage() {
 
   const toggleListening = () => {
     if (!recognitionRef.current) {
-      alert('Speech Recognition is not supported in this browser. Please use Chrome or Edge.')
+      alert('Speech Recognition is not supported in this browser. Please use Google Chrome or Microsoft Edge.')
       return
     }
 
@@ -91,7 +103,6 @@ export default function DashboardPage() {
     }
   }
 
-  // Calculate total words in current transcript
   const wordCount = transcript.trim() ? transcript.trim().split(/\s+/).length : 0
 
   const handleSubmitAnswer = async () => {
