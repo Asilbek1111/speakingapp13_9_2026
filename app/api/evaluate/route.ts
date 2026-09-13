@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   try {
     const { userText, context } = await req.json()
 
-    // Server-side word count validation
+    // Validate minimum input
     const wordCount = userText ? userText.trim().split(/\s+/).length : 0
     if (wordCount < 3) {
       return NextResponse.json(
@@ -19,19 +19,21 @@ export async function POST(req: Request) {
     }
 
     const prompt = `
-You are an expert English speaking examiner for national Multi-Level (CEFR B1-C1) examinations.
-Evaluate the candidate's spoken response thoroughly out of a MAXIMUM TOTAL MARK OF 75.
+You are an expert English speaking examiner evaluating a candidate for the Uzbek Multi-Level (CEFR B1-C1) English examination.
+Evaluate the response out of a MAXIMUM TOTAL MARK OF 75.
 
 Question/Prompt: "${context || 'Tell me about yourself and your daily routine.'}"
-Candidate's Spoken Response: "${userText}"
+Candidate's Spoken Answer: "${userText}"
 
-Evaluate strictly based on these four criteria:
-1. Fluency & Coherence (Max 20 marks)
-2. Grammatical Range & Accuracy (Max 20 marks)
-3. Lexical Resource / Vocabulary (Max 20 marks)
-4. Pronunciation & Articulation (Max 15 marks)
+Scoring Breakdown (Total 75 marks):
+- Fluency & Coherence (Max 20 marks)
+- Grammatical Range & Accuracy (Max 20 marks)
+- Lexical Resource / Vocabulary (Max 20 marks)
+- Pronunciation & Articulation (Max 15 marks)
 
-Provide a JSON response matching this EXACT structure (NO markdown backticks, raw JSON only):
+You MUST respond strictly with a single valid JSON object. Do not include extra intro or outro text.
+
+JSON format requirement:
 {
   "totalScore": 58,
   "cefrLevel": "B2",
@@ -42,52 +44,61 @@ Provide a JSON response matching this EXACT structure (NO markdown backticks, ra
     "pronunciation": "13/15"
   },
   "mistakes": [
-    { "original": "I am go to study", "correction": "I go to study / I am going to study", "explanation": "Avoid combining 'am' with a base verb in simple present tense." }
+    {
+      "original": "candidate mistake phrase",
+      "correction": "corrected version",
+      "explanation": "brief grammatical explanation"
+    }
   ],
-  "polishedAnswer": "A highly polished, natural C1-level version of what the candidate attempted to say, using sophisticated vocabulary and varied sentence structures.",
-  "advice": "2-3 actionable, high-impact tips on how to improve their score for the next attempt.",
-  "nextQuestion": "The next logical question for the speaking exam.",
-  "spokenText": "A warm 1-sentence examiner summary of their performance followed by the next question."
+  "polishedAnswer": "A natural C1-level polished version of the candidate's response.",
+  "advice": "Actionable advice on how to raise their score for their next attempt.",
+  "nextQuestion": "The next logical question for the Multi-Level speaking test.",
+  "spokenText": "Examiner summary feedback followed by the next question spoken aloud."
 }
 `
 
     let response
     try {
-      // First attempt using stable gemini-2.5-flash
       response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
       })
-    } catch (firstErr: any) {
-      // Automatic retry logic if rate limit is temporarily hit
-      if (firstErr?.status === 429 || firstErr?.message?.includes('429')) {
-        console.warn('Rate limit encountered. Retrying request in 3 seconds...')
+    } catch (apiErr: any) {
+      if (apiErr?.status === 429 || apiErr?.message?.includes('429')) {
+        console.warn('Rate limit hit. Retrying in 3 seconds...')
         await delay(3000)
         response = await ai.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: prompt,
         })
       } else {
-        throw firstErr
+        throw apiErr
       }
     }
 
-    const rawText = response.text?.replace(/```json|```/g, '').trim() || '{}'
-    const parsedData = JSON.parse(rawText)
+    const textOutput = response.text || ''
 
+    // Safely extract JSON content even if wrapped in markdown fences
+    const jsonMatch = textOutput.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      console.error('Raw Gemini output was not valid JSON:', textOutput)
+      throw new Error('Could not parse structured evaluation output.')
+    }
+
+    const parsedData = JSON.parse(jsonMatch[0])
     return NextResponse.json(parsedData)
   } catch (error: any) {
-    console.error('AI Evaluation Error:', error)
+    console.error('AI Evaluation Backend Error:', error)
 
     if (error?.status === 429 || error?.message?.includes('429')) {
       return NextResponse.json(
-        { error: 'Google AI Studio rate limit reached. Please wait ~30 seconds before submitting again, or check your API key quota.' },
+        { error: 'System busy due to high traffic. Please wait 10 seconds and try again.' },
         { status: 429 }
       )
     }
 
     return NextResponse.json(
-      { error: 'Failed to evaluate response. Please try again.' },
+      { error: error?.message || 'Failed to evaluate response. Please try again.' },
       { status: 500 }
     )
   }
