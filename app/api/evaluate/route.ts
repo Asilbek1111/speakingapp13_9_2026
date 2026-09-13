@@ -3,13 +3,10 @@ import { NextResponse } from 'next/server'
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
 export async function POST(req: Request) {
   try {
     const { userText, context } = await req.json()
 
-    // Validate minimum spoken input
     const wordCount = userText ? userText.trim().split(/\s+/).length : 0
     if (wordCount < 3) {
       return NextResponse.json(
@@ -19,103 +16,81 @@ export async function POST(req: Request) {
     }
 
     const prompt = `
-You are an expert English speaking examiner evaluating a candidate for the Uzbek Multi-Level (CEFR B1-C1) English examination.
-Evaluate the candidate's response out of a MAXIMUM TOTAL MARK OF 75.
+You are an expert English speaking examiner for Multi-Level (CEFR B1-C1) examinations.
+Evaluate the candidate's response out of a MAXIMUM TOTAL MARK OF 75 based on CEFR criteria.
 
 Question/Prompt: "${context || 'Tell me about yourself and your daily routine.'}"
-Candidate's Spoken Answer: "${userText}"
-
-Scoring Breakdown (Total 75 marks):
-- Fluency & Coherence (Max 20 marks)
-- Grammatical Range & Accuracy (Max 20 marks)
-- Lexical Resource / Vocabulary (Max 20 marks)
-- Pronunciation & Articulation (Max 15 marks)
+Candidate's Spoken Response: "${userText}"
 `
 
-    let response
-    try {
-      response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              totalScore: { type: Type.NUMBER },
-              cefrLevel: { type: Type.STRING },
-              scores: {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            totalScore: { 
+              type: Type.INTEGER, 
+              description: 'Total mark out of 75' 
+            },
+            cefrLevel: { 
+              type: Type.STRING, 
+              description: 'Overall CEFR level, e.g. B1, B2, C1' 
+            },
+            mistakes: {
+              type: Type.ARRAY,
+              description: 'Key grammatical or vocabulary mistakes detected',
+              items: {
                 type: Type.OBJECT,
                 properties: {
-                  coherence: { type: Type.STRING },
-                  grammar: { type: Type.STRING },
-                  vocabulary: { type: Type.STRING },
-                  pronunciation: { type: Type.STRING },
+                  original: { type: Type.STRING },
+                  correction: { type: Type.STRING },
+                  explanation: { type: Type.STRING },
                 },
-                required: ['coherence', 'grammar', 'vocabulary', 'pronunciation'],
+                required: ['original', 'correction', 'explanation'],
               },
-              mistakes: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    original: { type: Type.STRING },
-                    correction: { type: Type.STRING },
-                    explanation: { type: Type.STRING },
-                  },
-                  required: ['original', 'correction', 'explanation'],
-                },
-              },
-              polishedAnswer: { type: Type.STRING },
-              advice: { type: Type.STRING },
-              nextQuestion: { type: Type.STRING },
-              spokenText: { type: Type.STRING },
             },
-            required: [
-              'totalScore',
-              'cefrLevel',
-              'scores',
-              'mistakes',
-              'polishedAnswer',
-              'advice',
-              'nextQuestion',
-              'spokenText',
-            ],
+            polishedAnswer: { 
+              type: Type.STRING, 
+              description: 'A polished CEFR C1 version of the candidates response' 
+            },
+            nextQuestion: { 
+              type: Type.STRING, 
+              description: 'The next logical follow-up question for the candidate' 
+            },
+            spokenText: { 
+              type: Type.STRING, 
+              description: 'Short 1-2 sentence examiner summary feedback' 
+            },
           },
+          required: [
+            'totalScore',
+            'cefrLevel',
+            'mistakes',
+            'polishedAnswer',
+            'nextQuestion',
+            'spokenText',
+          ],
         },
-      })
-    } catch (apiErr: any) {
-      if (apiErr?.status === 429 || apiErr?.message?.includes('429')) {
-        console.warn('Rate limit hit. Retrying in 3 seconds...')
-        await delay(3000)
-        response = await ai.models.generateContent({
-          model: 'gemini-3.6-flash',
-          contents: prompt,
-          config: {
-            responseMimeType: 'application/json',
-          },
-        })
-      } else {
-        throw apiErr
-      }
-    }
+      },
+    })
 
-    const textOutput = response.text || '{}'
-    const parsedData = JSON.parse(textOutput)
-
+    const parsedData = JSON.parse(response.text || '{}')
     return NextResponse.json(parsedData)
   } catch (error: any) {
-    console.error('AI Evaluation Backend Error:', error)
-
+    console.error('AI Evaluation Error:', error)
+    
     if (error?.status === 429 || error?.message?.includes('429')) {
       return NextResponse.json(
-        { error: 'System busy due to high traffic. Please wait 10 seconds and try again.' },
+        { error: 'Rate limit hit. Please wait a few seconds before trying again.' },
         { status: 429 }
       )
     }
 
     return NextResponse.json(
-      { error: error?.message || 'Failed to evaluate response. Please try again.' },
+      { error: 'Failed to evaluate response. Please try again.' },
       { status: 500 }
     )
   }

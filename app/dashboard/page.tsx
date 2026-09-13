@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { UserButton } from '@clerk/nextjs'
+import { useState } from 'react'
 
 interface Mistake {
   original: string
@@ -9,318 +8,197 @@ interface Mistake {
   explanation: string
 }
 
-interface DetailedEvaluation {
+interface EvaluationResult {
   totalScore: number
   cefrLevel: string
-  scores: {
-    coherence: string
-    grammar: string
-    vocabulary: string
-    pronunciation: string
-  }
   mistakes: Mistake[]
   polishedAnswer: string
-  advice: string
   nextQuestion: string
   spokenText: string
 }
 
-export default function DashboardPage() {
-  const [sessionStarted, setSessionStarted] = useState(false)
-  const [isListening, setIsListening] = useState(false)
-  const [transcript, setTranscript] = useState('')
-  const [currentQuestion, setCurrentQuestion] = useState(
-    'Do you work or are you a student?'
+export default function SpeakingExamPage() {
+  const [promptContext, setPromptContext] = useState(
+    'Describe your hometown and what you like most about it.'
   )
-  const [loading, setLoading] = useState(false)
-  const [evaluation, setEvaluation] = useState<DetailedEvaluation | null>(null)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [userText, setUserText] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errorMsg, setErrorMsg] = useState('')
+  const [result, setResult] = useState<EvaluationResult | null>(null)
 
-  const recognitionRef = useRef<any>(null)
+  const handleEvaluate = async () => {
+    if (!userText.trim() || isSubmitting) return
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const SpeechRecognition =
-        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-      if (SpeechRecognition) {
-        const recognition = new SpeechRecognition()
-        recognition.continuous = true
-        recognition.interimResults = false
-        recognition.lang = 'en-US'
-
-        recognition.onresult = (event: any) => {
-          let accumulatedText = ''
-          for (let i = 0; i < event.results.length; i++) {
-            const chunk = event.results[i][0].transcript.trim()
-            if (chunk) accumulatedText += chunk + ' '
-          }
-
-          const words = accumulatedText.trim().split(/\s+/)
-          const cleanWords: string[] = []
-          for (let i = 0; i < words.length; i++) {
-            if (i === 0 || words[i].toLowerCase() !== words[i - 1].toLowerCase()) {
-              cleanWords.push(words[i])
-            }
-          }
-          setTranscript(cleanWords.join(' '))
-        }
-
-        recognition.onerror = () => setIsListening(false)
-        recognition.onend = () => setIsListening(false)
-
-        recognitionRef.current = recognition
-      }
-    }
-  }, [])
-
-  const speakText = (text: string) => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
-      const utterance = new SpeechSynthesisUtterance(text)
-      utterance.rate = 0.95
-      utterance.lang = 'en-US'
-      window.speechSynthesis.speak(utterance)
-    }
-  }
-
-  const handleStartSession = () => {
-    setSessionStarted(true)
-    speakText(currentQuestion)
-  }
-
-  const toggleListening = () => {
-    if (!recognitionRef.current) {
-      alert('Speech Recognition is not supported in this browser. Please use Google Chrome or Safari.')
-      return
-    }
-
-    if (isListening) {
-      recognitionRef.current.stop()
-      setIsListening(false)
-    } else {
-      setTranscript('')
-      setErrorMessage(null)
-      try {
-        recognitionRef.current.start()
-        setIsListening(true)
-      } catch (err) {
-        console.error(err)
-      }
-    }
-  }
-
-  const wordCount = transcript.trim() ? transcript.trim().split(/\s+/).length : 0
-
-  const handleSubmitAnswer = async () => {
-    if (wordCount < 3) {
-      setErrorMessage('Please speak at least 3 words before submitting.')
-      return
-    }
-
-    if (isListening) {
-      recognitionRef.current.stop()
-      setIsListening(false)
-    }
-
-    setLoading(true)
-    setErrorMessage(null)
+    setIsSubmitting(true)
+    setErrorMsg('')
+    setResult(null)
 
     try {
-      const res = await fetch('/api/evaluate', {
+      const response = await fetch('/api/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userText: transcript, context: currentQuestion }),
+        body: JSON.stringify({
+          userText,
+          context: promptContext,
+        }),
       })
 
-      const data = await res.json()
+      const data = await response.json()
 
-      if (!res.ok) {
-        setErrorMessage(data.error || 'Evaluation failed.')
-        return
+      if (!response.ok) {
+        throw new Error(data.error || 'Evaluation failed')
       }
 
-      setEvaluation(data)
-      if (data.nextQuestion) setCurrentQuestion(data.nextQuestion)
-      if (data.spokenText) speakText(data.spokenText)
-    } catch (err) {
-      setErrorMessage('Connection error. Please try again.')
+      setResult(data)
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Something went wrong. Please try again.')
     } finally {
-      setLoading(false)
+      setIsSubmitting(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      <header className="p-4 border-b border-slate-800 flex justify-between items-center max-w-5xl mx-auto w-full">
-        <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-teal-400 bg-clip-text text-transparent">
-          Multi-Level Speaking Evaluator
-        </h1>
-        <UserButton />
-      </header>
+    <main className="min-h-screen bg-slate-50 py-10 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-3xl mx-auto space-y-8">
+        {/* Header */}
+        <div className="text-center space-y-2">
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+            Multi-Level Speaking Practice
+          </h1>
+          <p className="text-sm text-slate-600">
+            Submit your spoken transcript to receive instant CEFR scoring and feedback.
+          </p>
+        </div>
 
-      <main className="flex-1 max-w-4xl w-full mx-auto p-4 md:p-6 flex flex-col gap-6">
-        {!sessionStarted ? (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center space-y-6 my-auto">
-            <h2 className="text-2xl font-bold">Multi-Level Speaking Practice</h2>
-            <p className="text-slate-400 max-w-md mx-auto">
-              Get detailed 75-point score breakdowns, error analyses, and high-band answer rewrites.
-            </p>
-            <button
-              onClick={handleStartSession}
-              className="py-3 px-8 bg-blue-600 hover:bg-blue-500 font-semibold rounded-xl text-white shadow-lg transition transform active:scale-95"
-            >
-              Start Session
-            </button>
+        {/* Input Card */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
+              Exam Question / Prompt
+            </label>
+            <input
+              type="text"
+              value={promptContext}
+              onChange={(e) => setPromptContext(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
-        ) : (
-          <>
-            {/* Question Card */}
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-semibold uppercase tracking-wider text-blue-400">
-                  Examiner Question
+
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
+              Your Answer Transcript
+            </label>
+            <textarea
+              rows={4}
+              value={userText}
+              onChange={(e) => setUserText(e.target.value)}
+              placeholder="Type or transcribe candidate's response here..."
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {errorMsg && (
+            <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
+              {errorMsg}
+            </div>
+          )}
+
+          <button
+            onClick={handleEvaluate}
+            disabled={isSubmitting || userText.trim().split(/\s+/).length < 3}
+            className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed"
+          >
+            {isSubmitting ? 'Evaluating Response...' : 'Evaluate Answer'}
+          </button>
+        </div>
+
+        {/* Results Card */}
+        {result && (
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-6">
+            {/* Top Scores Bar */}
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div>
+                <span className="text-xs text-slate-500 uppercase font-semibold block">
+                  Total Score
                 </span>
-                <button
-                  onClick={() => speakText(currentQuestion)}
-                  className="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg text-slate-300 transition"
-                >
-                  🔊 Listen
-                </button>
+                <span className="text-3xl font-extrabold text-blue-600">
+                  {result.totalScore}{' '}
+                  <span className="text-lg font-normal text-slate-400">/ 75</span>
+                </span>
               </div>
-              <p className="text-lg md:text-xl font-medium text-slate-200">"{currentQuestion}"</p>
+              <div className="text-right">
+                <span className="text-xs text-slate-500 uppercase font-semibold block">
+                  CEFR Level
+                </span>
+                <span className="inline-block mt-1 px-3 py-1 bg-blue-100 text-blue-800 font-bold rounded-full text-sm">
+                  {result.cefrLevel}
+                </span>
+              </div>
             </div>
 
-            {/* Error Banner */}
-            {errorMessage && (
-              <div className="bg-red-950/80 border border-red-800 text-red-200 text-sm p-4 rounded-xl flex justify-between items-center">
-                <span>{errorMessage}</span>
-                <button onClick={() => setErrorMessage(null)} className="text-xs text-red-400 font-bold">✕</button>
+            {/* Examiner Summary */}
+            {result.spokenText && (
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 mb-1">
+                  Examiner Feedback
+                </h3>
+                <p className="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg">
+                  {result.spokenText}
+                </p>
               </div>
             )}
 
-            {/* Mic Controls & Transcript */}
-            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 flex flex-col items-center gap-4 text-center">
-              <button
-                onClick={toggleListening}
-                className={`w-20 h-20 rounded-full flex items-center justify-center text-2xl transition transform active:scale-95 shadow-lg ${
-                  isListening ? 'bg-red-500 animate-pulse text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'
-                }`}
-              >
-                {isListening ? '🛑' : '🎙️'}
-              </button>
-              <p className="text-sm text-slate-400">
-                {isListening ? 'Listening... Tap red button when finished.' : 'Tap mic to record your response.'}
-              </p>
-
-              {transcript && (
-                <div className="w-full bg-slate-950 p-4 rounded-xl border border-slate-800 text-left text-slate-300 text-sm">
-                  <div className="flex justify-between text-xs text-slate-500 mb-1">
-                    <span>Your Spoken Answer:</span>
-                    <span className={wordCount < 3 ? 'text-amber-400 font-semibold' : 'text-teal-400'}>
-                      {wordCount} words {wordCount < 3 && '(Min 3 words)'}
-                    </span>
-                  </div>
-                  {transcript}
-                </div>
-              )}
-
-              {transcript && (
-                <button
-                  onClick={handleSubmitAnswer}
-                  disabled={loading || wordCount < 3}
-                  className="w-full py-3 bg-teal-600 hover:bg-teal-500 text-white font-semibold rounded-xl transition disabled:opacity-40"
-                >
-                  {loading ? 'Analyzing Speaking Performance...' : 'Submit Response'}
-                </button>
-              )}
-            </div>
-
-            {/* Detailed Evaluation Section */}
-            {evaluation && (
-              <div className="space-y-6">
-                {/* Total Score Header */}
-                <div className="bg-slate-900 border border-teal-500/30 rounded-2xl p-6 flex justify-between items-center shadow-2xl">
-                  <div>
-                    <h3 className="text-sm text-slate-400 font-medium">Overall Score</h3>
-                    <div className="text-3xl font-extrabold text-teal-400 mt-1">
-                      {evaluation.totalScore} <span className="text-lg text-slate-500 font-normal">/ 75</span>
-                    </div>
-                  </div>
-                  <div className="bg-teal-950 border border-teal-800 px-4 py-2 rounded-xl text-center">
-                    <span className="text-xs text-teal-400 block font-semibold">CEFR LEVEL</span>
-                    <span className="text-xl font-bold text-teal-200">{evaluation.cefrLevel}</span>
-                  </div>
-                </div>
-
-                {/* 4 Criteria Sub-Score Cards */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center">
-                    <span className="text-xs text-slate-400 block mb-1">Coherence</span>
-                    <span className="text-lg font-bold text-blue-400">{evaluation.scores.coherence}</span>
-                  </div>
-                  <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center">
-                    <span className="text-xs text-slate-400 block mb-1">Grammar</span>
-                    <span className="text-lg font-bold text-indigo-400">{evaluation.scores.grammar}</span>
-                  </div>
-                  <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center">
-                    <span className="text-xs text-slate-400 block mb-1">Vocabulary</span>
-                    <span className="text-lg font-bold text-purple-400">{evaluation.scores.vocabulary}</span>
-                  </div>
-                  <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center">
-                    <span className="text-xs text-slate-400 block mb-1">Pronunciation</span>
-                    <span className="text-lg font-bold text-emerald-400">{evaluation.scores.pronunciation}</span>
-                  </div>
-                </div>
-
-                {/* Detected Mistakes */}
-                {evaluation.mistakes && evaluation.mistakes.length > 0 && (
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-3">
-                    <h4 className="text-sm font-semibold text-red-400 uppercase tracking-wider">
-                      ⚠️ Mistakes & Corrections
-                    </h4>
-                    <div className="space-y-3">
-                      {evaluation.mistakes.map((m, idx) => (
-                        <div key={idx} className="bg-slate-950 p-3 rounded-xl border border-red-950 text-sm space-y-1">
-                          <p className="text-red-300"><span className="line-through">{m.original}</span> → <strong className="text-emerald-400">{m.correction}</strong></p>
-                          <p className="text-xs text-slate-400">{m.explanation}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Polished Answer Model */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <h4 className="text-sm font-semibold text-purple-400 uppercase tracking-wider">
-                      ✨ Polished Answer (C1 Model)
-                    </h4>
-                    <button
-                      onClick={() => speakText(evaluation.polishedAnswer)}
-                      className="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1 rounded-lg text-slate-300"
+            {/* Mistakes Breakdown */}
+            {result.mistakes && result.mistakes.length > 0 && (
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 mb-3">
+                  Corrections & Explanations
+                </h3>
+                <div className="space-y-3">
+                  {result.mistakes.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3 border border-amber-200 bg-amber-50/50 rounded-lg text-sm space-y-1"
                     >
-                      🔊 Listen to Model Answer
-                    </button>
-                  </div>
-                  <p className="text-slate-300 text-sm italic leading-relaxed">
-                    "{evaluation.polishedAnswer}"
-                  </p>
-                </div>
-
-                {/* Actionable Advice */}
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-2">
-                  <h4 className="text-sm font-semibold text-amber-400 uppercase tracking-wider">
-                    💡 Tips to Increase Your Score
-                  </h4>
-                  <p className="text-slate-300 text-sm leading-relaxed">
-                    {evaluation.advice}
-                  </p>
+                      <p className="text-red-600 font-medium">
+                        ❌ <span className="line-through">{item.original}</span>
+                      </p>
+                      <p className="text-emerald-700 font-semibold">
+                        ✅ {item.correction}
+                      </p>
+                      <p className="text-xs text-slate-600">{item.explanation}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
-          </>
+
+            {/* Polished Answer */}
+            {result.polishedAnswer && (
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 mb-1">
+                  Model Response (C1 Level)
+                </h3>
+                <p className="text-sm text-slate-700 bg-emerald-50 border border-emerald-100 p-3 rounded-lg italic">
+                  "{result.polishedAnswer}"
+                </p>
+              </div>
+            )}
+
+            {/* Next Question Recommendation */}
+            {result.nextQuestion && (
+              <div className="pt-4 border-t border-slate-100">
+                <span className="text-xs text-slate-500 font-semibold block uppercase mb-1">
+                  Suggested Next Question
+                </span>
+                <p className="text-sm font-medium text-blue-900">
+                  {result.nextQuestion}
+                </p>
+              </div>
+            )}
+          </div>
         )}
-      </main>
-    </div>
+      </div>
+    </main>
   )
 }
